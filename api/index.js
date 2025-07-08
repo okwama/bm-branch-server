@@ -288,11 +288,20 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'BM Branch API Server', 
+    status: 'running',
+    timestamp: new Date().toISOString() 
+  });
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ message: 'Something went wrong!' });
 });
 
-// Export for Vercel
+// Export for Vercel serverless function
 module.exports = app; 
