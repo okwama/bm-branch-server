@@ -1,0 +1,28 @@
+{
+  "name": "bm-admin-backend",
+  "version": "1.0.0",
+  "description": "Backend server for BM Admin",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "node api/index.js",
+    "dev": "nodemon api/index.js",
+    "vercel-build": "echo 'No build step required'"
+  },
+  "dependencies": {
+    "@types/leaflet": "^1.9.18",
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^1.41.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "leaflet": "^1.9.4",
+    "multer": "^2.0.1",
+    "multer-storage-cloudinary": "^4.0.0",
+    "mysql2": "^3.6.0",
+    "react-leaflet": "^5.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
