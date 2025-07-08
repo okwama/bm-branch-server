@@ -29,7 +29,7 @@ const authenticateToken = (req, res, next) => {
     return res.status(401).json({ message: 'Access token required' });
   }
   
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key', (err, user) => {
     if (err) {
       return res.status(403).json({ message: 'Invalid or expired token' });
     }
@@ -66,6 +66,14 @@ const mapRequestFields = (request) => ({
 // Auth routes
 app.post('/api/auth/login', async (req, res) => {
   try {
+    console.log('Login attempt received:', { username: req.body.username, hasPassword: !!req.body.password });
+    console.log('Environment check:', {
+      JWT_SECRET: process.env.JWT_SECRET ? 'SET' : 'NOT SET',
+      DB_HOST: process.env.DB_HOST ? 'SET' : 'NOT SET',
+      DB_USER: process.env.DB_USER ? 'SET' : 'NOT SET',
+      DB_NAME: process.env.DB_NAME ? 'SET' : 'NOT SET'
+    });
+    
     const { username, password } = req.body;
 
     if (!username || !password) {
@@ -73,10 +81,12 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Get branch from database using name instead of username
+    console.log('Attempting database query for username:', username);
     const branches = await executeQuery(
       'SELECT * FROM branches WHERE name = ?',
       [username]
     );
+    console.log('Database query result:', { found: branches.length > 0, branchCount: branches.length });
 
     if (branches.length === 0) {
       return res.status(401).json({ message: 'Invalid credentials' });
@@ -98,7 +108,7 @@ app.post('/api/auth/login', async (req, res) => {
         role: branch.role,
         clientId: branch.client_id
       },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '24h' }
     );
 
@@ -114,7 +124,17 @@ app.post('/api/auth/login', async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      errno: error.errno
+    });
+    res.status(500).json({ 
+      message: 'Internal server error',
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
