@@ -267,6 +267,68 @@ app.get('/api/staff', authenticateToken, async (req, res) => {
   }
 });
 
+app.post('/api/staff', authenticateToken, async (req, res) => {
+  try {
+    const { name, photo_url, empl_no, id_no, role } = req.body;
+    
+    if (!name || !empl_no || !id_no || !role) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    const result = await executeQuery(
+      'INSERT INTO staff (name, photo_url, empl_no, id_no, role, status) VALUES (?, ?, ?, ?, ?, 1)',
+      [name, photo_url || null, empl_no, id_no, role]
+    );
+
+    const newStaff = await executeQuery('SELECT * FROM staff WHERE id = ?', [result.insertId]);
+    res.status(201).json(newStaff[0]);
+  } catch (error) {
+    console.error('Error creating staff:', error);
+    res.status(500).json({ message: 'Error creating staff member' });
+  }
+});
+
+app.put('/api/staff/:id/status', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (status !== 0 && status !== 1) {
+      return res.status(400).json({ message: 'Status must be 0 or 1' });
+    }
+
+    await executeQuery('UPDATE staff SET status = ? WHERE id = ?', [status, id]);
+    
+    const updatedStaff = await executeQuery('SELECT * FROM staff WHERE id = ?', [id]);
+    res.json(updatedStaff[0]);
+  } catch (error) {
+    console.error('Error updating staff status:', error);
+    res.status(500).json({ message: 'Error updating staff status' });
+  }
+});
+
+app.put('/api/staff/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, photo_url, empl_no, id_no, role } = req.body;
+
+    if (!name || !empl_no || !id_no || !role) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    await executeQuery(
+      'UPDATE staff SET name = ?, photo_url = ?, empl_no = ?, id_no = ?, role = ? WHERE id = ?',
+      [name, photo_url || null, empl_no, id_no, role, id]
+    );
+
+    const updatedStaff = await executeQuery('SELECT * FROM staff WHERE id = ?', [id]);
+    res.json(updatedStaff[0]);
+  } catch (error) {
+    console.error('Error updating staff:', error);
+    res.status(500).json({ message: 'Error updating staff member' });
+  }
+});
+
 // Upload routes
 app.post('/api/upload', authenticateToken, upload.single('photo'), async (req, res) => {
   try {
@@ -280,6 +342,59 @@ app.post('/api/upload', authenticateToken, upload.single('photo'), async (req, r
   } catch (error) {
     console.error('Upload error:', error);
     res.status(500).json({ message: 'Upload failed' });
+  }
+});
+
+// SOS routes
+app.get('/api/sos', authenticateToken, async (req, res) => {
+  try {
+    const query = `
+      SELECT s.*, st.name as guard_name
+      FROM sos s
+      LEFT JOIN staff st ON s.staff_id = st.id
+      ORDER BY s.created_at DESC
+    `;
+    
+    const sosList = await executeQuery(query);
+    res.json(sosList);
+  } catch (error) {
+    console.error('Error fetching SOS list:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+app.patch('/api/sos/:id/status', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, comment } = req.body;
+
+    // Validate status
+    const validStatuses = ['pending', 'in_progress', 'resolved'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: 'Invalid status' });
+    }
+
+    const query = `
+      UPDATE sos 
+      SET status = ?,
+          comment = ?
+      WHERE id = ?
+    `;
+    
+    await executeQuery(query, [status, comment || null, id]);
+    
+    // Fetch updated SOS record
+    const updatedSos = await executeQuery(`
+      SELECT s.*, st.name as guard_name
+      FROM sos s
+      LEFT JOIN staff st ON s.staff_id = st.id
+      WHERE s.id = ?
+    `, [id]);
+
+    res.json(updatedSos[0]);
+  } catch (error) {
+    console.error('Error updating SOS status:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
