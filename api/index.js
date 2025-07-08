@@ -403,6 +403,40 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Database test endpoint
+app.get('/api/test-db', async (req, res) => {
+  try {
+    console.log('Testing database connection...');
+    console.log('Environment variables:', {
+      DB_HOST: process.env.DB_HOST ? 'SET' : 'NOT SET',
+      DB_USER: process.env.DB_USER ? 'SET' : 'NOT SET',
+      DB_NAME: process.env.DB_NAME ? 'SET' : 'NOT SET',
+      JWT_SECRET: process.env.JWT_SECRET ? 'SET' : 'NOT SET'
+    });
+    
+    const result = await executeQuery('SELECT 1 as test');
+    console.log('Database test result:', result);
+    
+    res.json({ 
+      status: 'Database connected successfully',
+      test: result,
+      env: {
+        DB_HOST: process.env.DB_HOST ? 'SET' : 'NOT SET',
+        DB_USER: process.env.DB_USER ? 'SET' : 'NOT SET',
+        DB_NAME: process.env.DB_NAME ? 'SET' : 'NOT SET',
+        JWT_SECRET: process.env.JWT_SECRET ? 'SET' : 'NOT SET'
+      }
+    });
+  } catch (error) {
+    console.error('Database test error:', error);
+    res.status(500).json({ 
+      status: 'Database connection failed',
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({ 
