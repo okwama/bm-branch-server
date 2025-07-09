@@ -474,6 +474,109 @@ app.get('/api/cors-test', (req, res) => {
 // Log routes
 app.post('/api/logs', receiveLog);
 
+// Import notice controller
+const noticeController = require('../controllers/noticeController');
+
+// Notice routes
+app.get('/api/notices', authenticateToken, noticeController.getNotices);
+app.post('/api/notices', authenticateToken, noticeController.createNotice);
+app.put('/api/notices/:id', authenticateToken, noticeController.updateNotice);
+app.delete('/api/notices/:id', authenticateToken, noticeController.deleteNotice);
+app.put('/api/notices/:id/status', authenticateToken, noticeController.toggleNoticeStatus);
+
+// Clients routes
+app.get('/api/clients', authenticateToken, async (req, res) => {
+  try {
+    const clients = await executeQuery('SELECT * FROM clients ORDER BY created_at DESC');
+    res.json(clients);
+  } catch (error) {
+    console.error('Error fetching clients:', error);
+    res.status(500).json({ message: 'Error fetching clients' });
+  }
+});
+
+app.post('/api/clients', authenticateToken, async (req, res) => {
+  try {
+    const { name, account_number, email, phone, address } = req.body;
+    
+    if (!name || !account_number || !email) {
+      return res.status(400).json({ message: 'Name, account number and email are required' });
+    }
+
+    const result = await executeQuery(
+      'INSERT INTO clients (name, account_number, email, phone, address) VALUES (?, ?, ?, ?, ?)',
+      [name, account_number, email, phone || null, address || null]
+    );
+
+    const newClient = await executeQuery('SELECT * FROM clients WHERE id = ?', [result.insertId]);
+    res.status(201).json(newClient[0]);
+  } catch (error) {
+    console.error('Error creating client:', error);
+    res.status(500).json({ message: 'Error creating client' });
+  }
+});
+
+// Runs/summaries routes
+app.get('/api/runs/summaries', authenticateToken, async (req, res) => {
+  try {
+    const summaries = await executeQuery(`
+      SELECT 
+        DATE(pickup_date) as date,
+        COUNT(*) as totalRuns,
+        COUNT(CASE WHEN status = 'completed' THEN 1 END) as totalRunsCompleted,
+        COALESCE(SUM(price), 0) as totalAmount,
+        COALESCE(SUM(CASE WHEN status = 'completed' THEN price ELSE 0 END), 0) as totalAmountCompleted
+      FROM requests 
+      WHERE pickup_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+      GROUP BY DATE(pickup_date)
+      ORDER BY date DESC
+    `);
+    res.json(summaries);
+  } catch (error) {
+    console.error('Error fetching run summaries:', error);
+    res.status(500).json({ message: 'Error fetching run summaries' });
+  }
+});
+
+app.get('/api/runs', authenticateToken, async (req, res) => {
+  try {
+    const { date, clientId, branchId } = req.query;
+    let query = `
+      SELECT r.*, b.name as branch_name, c.name as client_name, st.name as service_type_name
+      FROM requests r
+      LEFT JOIN branches b ON r.branch_id = b.id
+      LEFT JOIN clients c ON b.client_id = c.id
+      LEFT JOIN service_types st ON r.service_type_id = st.id
+    `;
+    const params = [];
+    const filters = [];
+    
+    if (date) {
+      filters.push('DATE(r.pickup_date) = ?');
+      params.push(date);
+    }
+    if (clientId) {
+      filters.push('c.id = ?');
+      params.push(clientId);
+    }
+    if (branchId) {
+      filters.push('r.branch_id = ?');
+      params.push(branchId);
+    }
+    
+    if (filters.length > 0) {
+      query += ' WHERE ' + filters.join(' AND ');
+    }
+    query += ' ORDER BY r.pickup_date DESC';
+    
+    const runs = await executeQuery(query, params);
+    res.json(runs.map(mapRequestFields));
+  } catch (error) {
+    console.error('Error fetching runs:', error);
+    res.status(500).json({ message: 'Error fetching runs' });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
