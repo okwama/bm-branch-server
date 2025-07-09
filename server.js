@@ -12,7 +12,6 @@ const clientController = require('./controllers/clientController');
 const branchController = require('./controllers/branchController');
 const serviceChargeController = require('./controllers/serviceChargeController');
 const noticeController = require('./controllers/noticeController');
-const logRoutes = require('./routes/logRoutes');
 require('dotenv').config();
 
 const app = express();
@@ -21,7 +20,7 @@ const app = express();
 const corsOptions = {
   origin: [
     'http://localhost:5173', // Local development
-    process.env.FRONTEND_URL, // Custom frontend URL
+    process.env.FRONTEND_URL || 'https://bm-branch-client.vercel.app', // Custom frontend URL
     /^https:\/\/.*\.vercel\.app$/ // Allow all Vercel deployments
   ].filter(Boolean), // Remove undefined values
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -34,8 +33,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Log routes
-app.use('/api/logs', logRoutes);
+
 
 // Helper function to map database fields to frontend fields
 const mapRequestFields = (request) => ({
