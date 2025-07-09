@@ -12,13 +12,18 @@ const clientController = require('./controllers/clientController');
 const branchController = require('./controllers/branchController');
 const serviceChargeController = require('./controllers/serviceChargeController');
 const noticeController = require('./controllers/noticeController');
+const logRoutes = require('./routes/logRoutes');
 require('dotenv').config();
 
 const app = express();
 
 // CORS configuration
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173', // Vite's default port
+  origin: [
+    'http://localhost:5173', // Local development
+    process.env.FRONTEND_URL, // Custom frontend URL
+    /^https:\/\/.*\.vercel\.app$/ // Allow all Vercel deployments
+  ].filter(Boolean), // Remove undefined values
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -28,6 +33,9 @@ const corsOptions = {
 // Middleware
 app.use(cors(corsOptions));
 app.use(express.json());
+
+// Log routes
+app.use('/api/logs', logRoutes);
 
 // Helper function to map database fields to frontend fields
 const mapRequestFields = (request) => ({

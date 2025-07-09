@@ -5,28 +5,27 @@ require('dotenv').config();
 // Creates new connection for each request instead of pooling
 const createConnection = async () => {
   try {
-    // Check if required environment variables are set
-    if (!process.env.DB_HOST || !process.env.DB_USER || !process.env.DB_PASSWORD || !process.env.DB_NAME) {
-      throw new Error('Database environment variables are not configured. Please set DB_HOST, DB_USER, DB_PASSWORD, and DB_NAME.');
-    }
-
     const connection = await mysql.createConnection({
-      host: process.env.DB_HOST,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
-      // Serverless optimizations
-      acquireTimeout: 60000,
-      timeout: 60000,
-      reconnect: false,
-      // Disable connection pooling for serverless
+      host: process.env.DB_HOST || '102.218.215.35',
+      user: process.env.DB_USER || 'citlogis_bryan',
+      password: process.env.DB_PASSWORD || '@bo9511221.qwerty',
+      database: process.env.DB_NAME || 'citlogis_mybm',
+      ssl: process.env.DB_HOST !== '102.218.215.35' ? {
+        rejectUnauthorized: false
+      } : false,
       connectionLimit: 1,
-      queueLimit: 0
+      queueLimit: 0,
+      port: process.env.DB_PORT || 3306
     });
 
     return connection;
   } catch (error) {
     console.error('Database connection error:', error);
+    console.error('Environment check:', {
+      DB_HOST: process.env.DB_HOST ? 'SET' : 'NOT SET',
+      DB_USER: process.env.DB_USER ? 'SET' : 'NOT SET',
+      DB_NAME: process.env.DB_NAME ? 'SET' : 'NOT SET'
+    });
     throw error;
   }
 };

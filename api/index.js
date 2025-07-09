@@ -434,21 +434,6 @@ app.get('/api/test-db', async (req, res) => {
       JWT_SECRET: process.env.JWT_SECRET ? 'SET' : 'NOT SET'
     });
     
-    // Check if environment variables are set
-    if (!process.env.DB_HOST || !process.env.DB_USER || !process.env.DB_PASSWORD || !process.env.DB_NAME) {
-      return res.status(500).json({
-        status: 'Database configuration missing',
-        error: 'Database environment variables are not configured',
-        required: ['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'],
-        current: {
-          DB_HOST: process.env.DB_HOST ? 'SET' : 'NOT SET',
-          DB_USER: process.env.DB_USER ? 'SET' : 'NOT SET',
-          DB_PASSWORD: process.env.DB_PASSWORD ? 'SET' : 'NOT SET',
-          DB_NAME: process.env.DB_NAME ? 'SET' : 'NOT SET'
-        }
-      });
-    }
-    
     const result = await executeQuery('SELECT 1 as test');
     console.log('Database test result:', result);
     
@@ -467,13 +452,7 @@ app.get('/api/test-db', async (req, res) => {
     res.status(500).json({ 
       status: 'Database connection failed',
       error: error.message,
-      stack: error.stack,
-      env: {
-        DB_HOST: process.env.DB_HOST ? 'SET' : 'NOT SET',
-        DB_USER: process.env.DB_USER ? 'SET' : 'NOT SET',
-        DB_PASSWORD: process.env.DB_PASSWORD ? 'SET' : 'NOT SET',
-        DB_NAME: process.env.DB_NAME ? 'SET' : 'NOT SET'
-      }
+      stack: error.stack
     });
   }
 });
