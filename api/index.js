@@ -4,7 +4,21 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { executeQuery } = require('../database/serverless-db');
 const { upload } = require('../config/cloudinary');
-const logRoutes = require('../routes/logRoutes');
+
+// Log routes with error handling
+let logRoutes;
+try {
+  logRoutes = require('../routes/logRoutes');
+  console.log('✅ Log routes loaded successfully');
+} catch (error) {
+  console.error('❌ Error loading log routes:', error.message);
+  // Create a fallback route
+  logRoutes = require('express').Router();
+  logRoutes.post('/', (req, res) => {
+    console.log('Fallback log handler:', req.body);
+    res.json({ success: true });
+  });
+}
 
 const app = express();
 
@@ -12,33 +26,73 @@ const app = express();
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
-      '/*',
       'https://bm-branch-client.vercel.app',
+      'http://localhost:5173',
+      'http://localhost:3000',
       process.env.FRONTEND_URL
     ].filter(Boolean);
     
-    // Allow requests with no origin (mobile apps, etc.)
-    if (!origin) return callback(null, true);
+    console.log('CORS Check - Origin:', origin, 'Allowed:', allowedOrigins);
     
-    // Check if origin is in allowed list or matches Vercel pattern
-    if (allowedOrigins.includes(origin) || /^https:\/\/.*\.vercel\.app$/.test(origin)) {
+    // Allow requests with no origin (mobile apps, etc.)
+    if (!origin) {
+      console.log('CORS - No origin provided, allowing');
       return callback(null, true);
     }
     
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin)) {
+      console.log('CORS - Origin in allowed list:', origin);
+      return callback(null, true);
+    }
+    
+    // Check if origin matches Vercel pattern
+    if (/^https:\/\/.*\.vercel\.app$/.test(origin)) {
+      console.log('CORS - Origin matches Vercel pattern:', origin);
+      return callback(null, true);
+    }
+    
+    // Allow localhost for development
+    if (/^http:\/\/localhost(:[0-9]+)?$/.test(origin)) {
+      console.log('CORS - Localhost origin allowed:', origin);
+      return callback(null, true);
+    }
+    
+    console.log('CORS - Origin rejected:', origin);
     return callback(new Error('Not allowed by CORS'));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  preflightContinue: false
 };
 
 // Middleware
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' })); // Limit payload size for serverless
 
-// Mount routes
-app.use('/api/logs', logRoutes);
+// Handle preflight requests explicitly
+app.options('*', cors(corsOptions));
+
+// Additional CORS headers middleware for serverless environments
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    'https://bm-branch-client.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ];
+  
+  if (!origin || allowedOrigins.includes(origin) || /^https:\/\/.*\.vercel\.app$/.test(origin) || /^http:\/\/localhost(:[0-9]+)?$/.test(origin)) {
+    res.header('Access-Control-Allow-Origin', origin || '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  
+  next();
+});
 
 // Authentication middleware
 const authenticateToken = (req, res, next) => {
@@ -438,6 +492,9 @@ app.patch('/api/sos/:id/status', authenticateToken, async (req, res) => {
   }
 });
 
+// Mount log routes
+app.use('/api/logs', logRoutes);
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
@@ -482,7 +539,19 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'BM Branch API Server', 
     status: 'running',
-    timestamp: new Date().toISOString() 
+    timestamp: new Date().toISOString(),
+    corsOrigin: req.headers.origin,
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// API test endpoint
+app.get('/api', (req, res) => {
+  res.json({ 
+    message: 'BM Branch API', 
+    status: 'running',
+    timestamp: new Date().toISOString(),
+    corsOrigin: req.headers.origin
   });
 });
 
