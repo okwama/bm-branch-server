@@ -107,6 +107,123 @@ const mapRequestFields = (request) => ({
 });
 
 // Auth routes
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { name, email, password, role } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Name, email, and password are required' });
+    }
+
+    // Check if user already exists
+    const existingUsers = await executeQuery(
+      'SELECT id FROM branches WHERE email = ?',
+      [email]
+    );
+
+    if (existingUsers.length > 0) {
+      return res.status(409).json({ message: 'User already exists' });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Create new branch/user
+    const result = await executeQuery(
+      'INSERT INTO branches (name, email, password, role) VALUES (?, ?, ?, ?)',
+      [name, email, hashedPassword, role || 'branch']
+    );
+
+    // Create JWT token
+    const token = jwt.sign(
+      { 
+        branchId: result.insertId,
+        name: name,
+        role: role || 'branch',
+        email: email
+      },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '24h' }
+    );
+
+    res.status(201).json({
+      token,
+      user: {
+        id: result.insertId,
+        name: name,
+        email: email,
+        role: role || 'branch'
+      }
+    });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+app.get('/api/auth/profile', authenticateToken, async (req, res) => {
+  try {
+    const branchId = req.user?.branchId;
+    
+    if (!branchId) {
+      return res.status(401).json({ message: 'Invalid token' });
+    }
+
+    const branches = await executeQuery(
+      'SELECT id, name, email, role, client_id FROM branches WHERE id = ?',
+      [branchId]
+    );
+
+    if (branches.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json(branches[0]);
+  } catch (error) {
+    console.error('Profile fetch error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+app.post('/api/auth/refresh', async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(401).json({ message: 'Refresh token required' });
+    }
+
+    // Verify the token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    
+    // Create new token
+    const newToken = jwt.sign(
+      { 
+        branchId: decoded.branchId,
+        name: decoded.name,
+        role: decoded.role,
+        clientId: decoded.clientId
+      },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      token: newToken,
+      user: {
+        id: decoded.branchId,
+        name: decoded.name,
+        email: decoded.email,
+        role: decoded.role,
+        client_id: decoded.clientId
+      }
+    });
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    res.status(401).json({ message: 'Invalid or expired token' });
+  }
+});
+
 app.post('/api/auth/login', async (req, res) => {
   try {
     console.log('Login attempt received:', { username: req.body.username, hasPassword: !!req.body.password });
@@ -319,6 +436,76 @@ app.post('/api/requests', authenticateToken, async (req, res) => {
   }
 });
 
+app.patch('/api/requests/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    // Build dynamic update query
+    const allowedFields = ['status', 'my_status', 'priority', 'description', 'team_id', 'staff_id'];
+    const dbUpdates = {};
+    
+    allowedFields.forEach(field => {
+      if (updates[field] !== undefined) {
+        dbUpdates[field] = updates[field];
+      }
+    });
+
+    if (Object.keys(dbUpdates).length === 0) {
+      return res.status(400).json({ message: 'No valid fields to update' });
+    }
+
+    const setClause = Object.keys(dbUpdates)
+      .map(key => `${key} = ?`)
+      .join(', ');
+    
+    const values = [...Object.values(dbUpdates), id];
+
+    await executeQuery(
+      `UPDATE requests SET ${setClause} WHERE id = ?`,
+      values
+    );
+
+    // Get the updated request
+    const requests = await executeQuery(`
+      SELECT r.*, b.name as branch_name, c.name as client_name, st.name as service_type_name
+      FROM requests r
+      LEFT JOIN branches b ON r.branch_id = b.id
+      LEFT JOIN clients c ON b.client_id = c.id
+      LEFT JOIN service_types st ON r.service_type_id = st.id
+      WHERE r.id = ?
+    `, [id]);
+
+    if (requests.length === 0) {
+      return res.status(404).json({ message: 'Request not found' });
+    }
+
+    res.json(mapRequestFields(requests[0]));
+  } catch (error) {
+    console.error('Error updating request:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+app.get('/api/requests/in-transit', authenticateToken, async (req, res) => {
+  try {
+    const requests = await executeQuery(`
+      SELECT r.*, b.name as branch_name, c.name as client_name, st.name as service_type_name
+      FROM requests r
+      LEFT JOIN branches b ON r.branch_id = b.id
+      LEFT JOIN clients c ON b.client_id = c.id
+      LEFT JOIN service_types st ON r.service_type_id = st.id
+      WHERE r.status = 'in_transit' OR r.my_status = 2
+      ORDER BY r.created_at DESC
+    `);
+    
+    res.json(requests.map(mapRequestFields));
+  } catch (error) {
+    console.error('Error fetching in-transit requests:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Staff routes
 app.get('/api/staff', authenticateToken, async (req, res) => {
   try {
@@ -495,6 +682,22 @@ app.get('/api/clients', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/clients/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const clients = await executeQuery('SELECT * FROM clients WHERE id = ?', [id]);
+    
+    if (clients.length === 0) {
+      return res.status(404).json({ message: 'Client not found' });
+    }
+    
+    res.json(clients[0]);
+  } catch (error) {
+    console.error('Error fetching client:', error);
+    res.status(500).json({ message: 'Error fetching client' });
+  }
+});
+
 app.post('/api/clients', authenticateToken, async (req, res) => {
   try {
     const { name, account_number, email, phone, address } = req.body;
@@ -513,6 +716,49 @@ app.post('/api/clients', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error creating client:', error);
     res.status(500).json({ message: 'Error creating client' });
+  }
+});
+
+app.put('/api/clients/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, account_number, email, phone, address } = req.body;
+    
+    if (!name || !account_number || !email) {
+      return res.status(400).json({ message: 'Name, account number and email are required' });
+    }
+
+    await executeQuery(
+      'UPDATE clients SET name = ?, account_number = ?, email = ?, phone = ?, address = ? WHERE id = ?',
+      [name, account_number, email, phone || null, address || null, id]
+    );
+
+    const updatedClient = await executeQuery('SELECT * FROM clients WHERE id = ?', [id]);
+    
+    if (updatedClient.length === 0) {
+      return res.status(404).json({ message: 'Client not found' });
+    }
+    
+    res.json(updatedClient[0]);
+  } catch (error) {
+    console.error('Error updating client:', error);
+    res.status(500).json({ message: 'Error updating client' });
+  }
+});
+
+app.delete('/api/clients/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await executeQuery('DELETE FROM clients WHERE id = ?', [id]);
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Client not found' });
+    }
+    
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting client:', error);
+    res.status(500).json({ message: 'Error deleting client' });
   }
 });
 
