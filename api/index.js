@@ -9,7 +9,12 @@ const app = express();
 
 // CORS configuration for serverless
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: [
+    'http://localhost:5173', // Local development
+    'https://bm-branch-client.vercel.app', // Production frontend
+    process.env.FRONTEND_URL, // Custom frontend URL
+    /^https:\/\/.*\.vercel\.app$/ // Allow all Vercel deployments
+  ].filter(Boolean), // Remove undefined values
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
