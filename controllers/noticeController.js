@@ -1,12 +1,13 @@
-const db = require('../database/db');
+const { executeQuery } = require('../database/serverless-db');
 
 const noticeController = {
   getNotices: async (req, res) => {
     try {
-      const [notices] = await db.query(`
-        SELECT*
+      const notices = await executeQuery(`
+        SELECT n.*, s.name as created_by_name
         FROM notices n
-         
+        LEFT JOIN staff s ON n.created_by = s.id
+        ORDER BY n.created_at DESC
       `);
       res.json(notices);
     } catch (error) {
@@ -20,14 +21,15 @@ const noticeController = {
     const created_by = req.user?.id; // Assuming you have user info in req.user from auth middleware
 
     try {
-      const [result] = await db.query(
+      const result = await executeQuery(
         'INSERT INTO notices (title, content, created_by) VALUES (?, ?, ?)',
         [title, content, created_by]
       );
 
-      const [newNotice] = await db.query(`
-        SELECT *
+      const newNotice = await executeQuery(`
+        SELECT n.*, s.name as created_by_name
         FROM notices n
+        LEFT JOIN staff s ON n.created_by = s.id
         WHERE n.id = ?
       `, [result.insertId]);
 
@@ -43,15 +45,15 @@ const noticeController = {
     const { title, content } = req.body;
 
     try {
-      await db.query(
+      await executeQuery(
         'UPDATE notices SET title = ?, content = ? WHERE id = ?',
         [title, content, id]
       );
 
-      const [updatedNotice] = await db.query(`
-        SELECT *
+      const updatedNotice = await executeQuery(`
+        SELECT n.*, s.name as created_by_name
         FROM notices n
-         
+        LEFT JOIN staff s ON n.created_by = s.id
         WHERE n.id = ?
       `, [id]);
 
@@ -70,7 +72,7 @@ const noticeController = {
     const { id } = req.params;
 
     try {
-      const [result] = await db.query('DELETE FROM notices WHERE id = ?', [id]);
+      const result = await executeQuery('DELETE FROM notices WHERE id = ?', [id]);
       
       if (result.affectedRows === 0) {
         return res.status(404).json({ message: 'Notice not found' });
@@ -88,12 +90,12 @@ const noticeController = {
     const { status } = req.body;
 
     try {
-      await db.query(
+      await executeQuery(
         'UPDATE notices SET status = ? WHERE id = ?',
         [status, id]
       );
 
-      const [updatedNotice] = await db.query(`
+      const updatedNotice = await executeQuery(`
         SELECT n.*, s.name as created_by_name
         FROM notices n
         LEFT JOIN staff s ON n.created_by = s.id
