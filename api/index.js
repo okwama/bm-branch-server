@@ -4,17 +4,29 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { executeQuery } = require('../database/serverless-db');
 const { upload } = require('../config/cloudinary');
+const logRoutes = require('../routes/logRoutes');
 
 const app = express();
 
 // CORS configuration for serverless
 const corsOptions = {
-  origin: [
-    'http://localhost:5173', // Local development
-    'https://bm-branch-client.vercel.app', // Production frontend
-    process.env.FRONTEND_URL, // Custom frontend URL
-    /^https:\/\/.*\.vercel\.app$/ // Allow all Vercel deployments
-  ].filter(Boolean), // Remove undefined values
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'https://bm-branch-client.vercel.app',
+      process.env.FRONTEND_URL
+    ].filter(Boolean);
+    
+    // Allow requests with no origin (mobile apps, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list or matches Vercel pattern
+    if (allowedOrigins.includes(origin) || /^https:\/\/.*\.vercel\.app$/.test(origin)) {
+      return callback(null, true);
+    }
+    
+    return callback(new Error('Not allowed by CORS'));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -25,7 +37,8 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' })); // Limit payload size for serverless
 
-
+// Mount routes
+app.use('/api/logs', logRoutes);
 
 // Authentication middleware
 const authenticateToken = (req, res, next) => {
