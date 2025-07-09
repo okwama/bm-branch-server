@@ -12,7 +12,7 @@ const app = express();
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
-      'http://localhost:5173',
+      '/*',
       'https://bm-branch-client.vercel.app',
       process.env.FRONTEND_URL
     ].filter(Boolean);
