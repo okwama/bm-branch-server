@@ -480,9 +480,9 @@ const noticeController = require('../controllers/noticeController');
 // Notice routes
 app.get('/api/notices', authenticateToken, noticeController.getNotices);
 app.post('/api/notices', authenticateToken, noticeController.createNotice);
-app.put('/api/notices/:id', authenticateToken, noticeController.updateNotice);
+app.patch('/api/notices/:id', authenticateToken, noticeController.updateNotice);
 app.delete('/api/notices/:id', authenticateToken, noticeController.deleteNotice);
-app.put('/api/notices/:id/status', authenticateToken, noticeController.toggleNoticeStatus);
+app.patch('/api/notices/:id/status', authenticateToken, noticeController.toggleNoticeStatus);
 
 // Clients routes
 app.get('/api/clients', authenticateToken, async (req, res) => {
