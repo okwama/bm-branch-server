@@ -765,18 +765,56 @@ app.delete('/api/clients/:id', authenticateToken, async (req, res) => {
 // Runs/summaries routes
 app.get('/api/runs/summaries', authenticateToken, async (req, res) => {
   try {
-    const summaries = await executeQuery(`
+    const { year, month, clientId, branchId } = req.query;
+    const userBranchId = req.user?.branchId; // Get branch ID from JWT token
+    
+    let query = `
       SELECT 
         DATE(pickup_date) as date,
         COUNT(*) as totalRuns,
         COUNT(CASE WHEN status = 'completed' THEN 1 END) as totalRunsCompleted,
         COALESCE(SUM(price), 0) as totalAmount,
         COALESCE(SUM(CASE WHEN status = 'completed' THEN price ELSE 0 END), 0) as totalAmountCompleted
-      FROM requests 
+      FROM requests r
+      LEFT JOIN branches b ON r.branch_id = b.id
       WHERE pickup_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+    `;
+    const params = [];
+
+    // Always filter by user's branch unless admin role
+    if (req.user?.role !== 'admin' && userBranchId) {
+      query += ' AND r.branch_id = ?';
+      params.push(userBranchId);
+    }
+
+    // Additional filters from query parameters
+    if (year) {
+      query += ' AND YEAR(r.pickup_date) = ?';
+      params.push(year);
+    }
+
+    if (month) {
+      query += ' AND MONTH(r.pickup_date) = ?';
+      params.push(month);
+    }
+
+    if (clientId) {
+      query += ' AND b.client_id = ?';
+      params.push(clientId);
+    }
+
+    // Allow branchId override for admin users
+    if (branchId && req.user?.role === 'admin') {
+      query += ' AND r.branch_id = ?';
+      params.push(branchId);
+    }
+
+    query += `
       GROUP BY DATE(pickup_date)
       ORDER BY date DESC
-    `);
+    `;
+
+    const summaries = await executeQuery(query, params);
     res.json(summaries);
   } catch (error) {
     console.error('Error fetching run summaries:', error);
